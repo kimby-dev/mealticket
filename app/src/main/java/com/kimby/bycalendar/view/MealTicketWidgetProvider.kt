@@ -42,6 +42,7 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
         const val ACTION_SHOW_PREVIOUS = "com.kimby.bycalendar.ACTION_SHOW_PREVIOUS"
         const val ACTION_SHOW_NEXT = "com.kimby.bycalendar.ACTION_SHOW_NEXT"
         const val ACTION_MIDNIGHT_TICK = "com.example.ACTION_MIDNIGHT_TICK"
+        private const val ACTION_MANUAL_REFRESH = "com.kimby.bycalendar.ACTION_MANUAL_REFRESH"
         private const val REQ_CODE_MIDNIGHT = 1001
         private var widgetIndexMap = mutableMapOf<Int, Int>()
 
@@ -117,12 +118,24 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
             ACTION_WIDGET_TAP -> {
                 val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    setLastTouch(context, id) // 터치 시각 갱신
-                    updateAppWidget(context, AppWidgetManager.getInstance(context), id) // 즉시 선명 갱신
+                    setLastTouch(context, id)
+                    updateAppWidget(context, AppWidgetManager.getInstance(context), id)
+                }
+            }
+
+            ACTION_MANUAL_REFRESH -> {
+                val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    setLastTouch(context, id)           // 수동만 상호작용으로 간주
+                    updateAppWidget(context, AppWidgetManager.getInstance(context), id)
                 }
             }
             ACTION_MARK_USED -> {
+                // 기존 처리 유지 + 상호작용으로 간주
                 val uri = intent.getStringExtra(EXTRA_IMAGE_URI)?.toUri() ?: return
+                val ids = AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
+                ids.forEach { setLastTouch(context, it) }
+                // (mark 처리 후 update 호출은 네 기존 로직대로)
                 markImageAsUsed(context, uri)
             }
             ACTION_SHOW_CONFIRM_DIALOG -> {
@@ -139,6 +152,7 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
                     AppWidgetManager.INVALID_APPWIDGET_ID
                 )
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    setLastTouch(context, appWidgetId)
                     val direction = if (intent.action == ACTION_SHOW_PREVIOUS) -1 else 1
                     updateAppWidget(
                         context,
@@ -147,6 +161,13 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
                         direction
                     )
                 }
+            }
+            AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
+                // 시스템이 주기/재배치 등으로 보낸 업데이트
+                // 여기서는 절대 setLastTouch() 하지 말 것!
+                val ids = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
+                    ?: AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
+                onUpdate(context, AppWidgetManager.getInstance(context), ids)
             }
         }
     }
@@ -307,98 +328,130 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
                             setLastTouch(context, appWidgetId)
                         }
 
-                        val shouldBlur = (nowMillis() - getLastTouch(context, appWidgetId)) >= thirtyMin
+                        val shouldBlur =
+                            (nowMillis() - getLastTouch(context, appWidgetId)) >= thirtyMin
 
-                        // blur 적용 여부 결정
-                        val displayBmp = if (shouldBlur) blurBitmap(resizedBmp, 12) else resizedBmp
-
-                        // 이미지 적용
-                        views.setImageViewBitmap(R.id.widget_image, displayBmp)
-                        views.setTextViewText(
-                            R.id.widget_title,
-                            "$today 오늘 식권 (${newIndex + 1} / ${tickets.size})"
-                        )
-
-                        // 이미지 탭하면 선명해지도록 클릭 인텐트 연결
-                        val tapIntent = Intent(context, MealTicketWidgetProvider::class.java).apply {
-                            action = ACTION_WIDGET_TAP
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                        }
-                        val tapPendingIntent = PendingIntent.getBroadcast(
-                            context,
-                            appWidgetId * 111,
-                            tapIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        views.setOnClickPendingIntent(R.id.widget_image, tapPendingIntent)
-                        // 🔽 교체 끝
-
-                        //  ✅ 사용 처리 버튼 🔜 다이얼로그 확인 처리
-                        val useIntent = Intent(context, MealTicketWidgetProvider::class.java).apply {
-                            action = ACTION_SHOW_CONFIRM_DIALOG
-                            putExtra(EXTRA_IMAGE_URI, imageFile.toUri().toString())
-                        }
-                        val usePendingIntent = PendingIntent.getBroadcast(
-                            context,
-                            appWidgetId * 1000,
-                            useIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        views.setOnClickPendingIntent(R.id.btn_mark_used_container, usePendingIntent)
-
-                        // 사용 완료 여부에 따라 버튼 스타일 변경
-                        if (photo.used) {
-                            views.setImageViewResource(R.id.btn_mark_used_bg, R.drawable.btn_used_128x57_gray) // 반투명 이미지
-                            views.setOnClickPendingIntent(R.id.btn_mark_used_container, null) // 클릭 막기
-                            views.setTextViewText(R.id.btn_mark_used_text, "사용 완료") // 텍스트 변경
-                        } else {
-                            views.setImageViewResource(R.id.btn_mark_used_bg, R.drawable.btn_used_128x57)
-                            views.setOnClickPendingIntent(R.id.btn_mark_used_container, usePendingIntent)
-                            views.setTextViewText(R.id.btn_mark_used_text, "사용 처리")
+                        // 💡 여기서 Default로 blur 계산
+                        val displayBmp = withContext(Dispatchers.Default) {
+                            if (shouldBlur) blurBitmap(resizedBmp, 12) else resizedBmp
                         }
 
-                        // 좌우 화살표 버튼 표시 여부
-                        views.setViewVisibility(R.id.btn_prev, if (newIndex > 0) View.VISIBLE else View.INVISIBLE)
-                        views.setViewVisibility(R.id.btn_next, if (newIndex < tickets.size - 1) View.VISIBLE else View.INVISIBLE)
+                        // Main에서 RemoteViews 적용
+                        withContext(Dispatchers.Main) {
+                            // 이미지 적용
+                            views.setImageViewBitmap(R.id.widget_image, displayBmp)
+                            views.setTextViewText(
+                                R.id.widget_title,
+                                "$today 오늘 식권 (${newIndex + 1} / ${tickets.size})"
+                            )
 
-                        // ✅ 이전 버튼
-                        val prevIntent = Intent(context, MealTicketWidgetProvider::class.java).apply {
-                            action = ACTION_SHOW_PREVIOUS
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                        }
-                        val prevPendingIntent = PendingIntent.getBroadcast(
-                            context,
-                            appWidgetId * 10,
-                            prevIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        views.setOnClickPendingIntent(R.id.btn_prev, prevPendingIntent)
+                            // 이미지 탭하면 선명해지도록 클릭 인텐트 연결
+                            val tapIntent =
+                                Intent(context, MealTicketWidgetProvider::class.java).apply {
+                                    action = ACTION_WIDGET_TAP
+                                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                                }
+                            val tapPendingIntent = PendingIntent.getBroadcast(
+                                context,
+                                appWidgetId * 111,
+                                tapIntent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+                            views.setOnClickPendingIntent(R.id.widget_image, tapPendingIntent)
+                            // 🔽 교체 끝
 
-                        // ✅ 다음 버튼
-                        val nextIntent = Intent(context, MealTicketWidgetProvider::class.java).apply {
-                            action = ACTION_SHOW_NEXT
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                        }
-                        val nextPendingIntent = PendingIntent.getBroadcast(
-                            context,
-                            appWidgetId * 10 + 1,
-                            nextIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        views.setOnClickPendingIntent(R.id.btn_next, nextPendingIntent)
+                            //  ✅ 사용 처리 버튼 🔜 다이얼로그 확인 처리
+                            val useIntent =
+                                Intent(context, MealTicketWidgetProvider::class.java).apply {
+                                    action = ACTION_SHOW_CONFIRM_DIALOG
+                                    putExtra(EXTRA_IMAGE_URI, imageFile.toUri().toString())
+                                }
+                            val usePendingIntent = PendingIntent.getBroadcast(
+                                context,
+                                appWidgetId * 1000,
+                                useIntent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+                            views.setOnClickPendingIntent(
+                                R.id.btn_mark_used_container,
+                                usePendingIntent
+                            )
 
-                        //  ✅ 위젯 갱신 버튼
-                        val refreshIntent = Intent(context, MealTicketWidgetProvider::class.java).apply {
-                            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
+                            // 사용 완료 여부에 따라 버튼 스타일 변경
+                            if (photo.used) {
+                                views.setImageViewResource(
+                                    R.id.btn_mark_used_bg,
+                                    R.drawable.btn_used_128x57_gray
+                                ) // 반투명 이미지
+                                views.setOnClickPendingIntent(
+                                    R.id.btn_mark_used_container,
+                                    null
+                                ) // 클릭 막기
+                                views.setTextViewText(R.id.btn_mark_used_text, "사용 완료") // 텍스트 변경
+                            } else {
+                                views.setImageViewResource(
+                                    R.id.btn_mark_used_bg,
+                                    R.drawable.btn_used_128x57
+                                )
+                                views.setOnClickPendingIntent(
+                                    R.id.btn_mark_used_container,
+                                    usePendingIntent
+                                )
+                                views.setTextViewText(R.id.btn_mark_used_text, "사용 처리")
+                            }
+
+                            // 좌우 화살표 버튼 표시 여부
+                            views.setViewVisibility(
+                                R.id.btn_prev,
+                                if (newIndex > 0) View.VISIBLE else View.INVISIBLE
+                            )
+                            views.setViewVisibility(
+                                R.id.btn_next,
+                                if (newIndex < tickets.size - 1) View.VISIBLE else View.INVISIBLE
+                            )
+
+                            // ✅ 이전 버튼
+                            val prevIntent =
+                                Intent(context, MealTicketWidgetProvider::class.java).apply {
+                                    action = ACTION_SHOW_PREVIOUS
+                                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                                }
+                            val prevPendingIntent = PendingIntent.getBroadcast(
+                                context,
+                                appWidgetId * 10,
+                                prevIntent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+                            views.setOnClickPendingIntent(R.id.btn_prev, prevPendingIntent)
+
+                            // ✅ 다음 버튼
+                            val nextIntent =
+                                Intent(context, MealTicketWidgetProvider::class.java).apply {
+                                    action = ACTION_SHOW_NEXT
+                                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                                }
+                            val nextPendingIntent = PendingIntent.getBroadcast(
+                                context,
+                                appWidgetId * 10 + 1,
+                                nextIntent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+                            views.setOnClickPendingIntent(R.id.btn_next, nextPendingIntent)
+
+                            //  ✅ 위젯 갱신 버튼 (수동)
+                            val refreshIntent =
+                                Intent(context, MealTicketWidgetProvider::class.java).apply {
+                                    action = ACTION_MANUAL_REFRESH
+                                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                                }
+                            val refreshPendingIntent = PendingIntent.getBroadcast(
+                                context,
+                                appWidgetId * 10000,
+                                refreshIntent,
+                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                            )
+                            views.setOnClickPendingIntent(R.id.btn_refresh_bg, refreshPendingIntent)
                         }
-                        val refreshPendingIntent = PendingIntent.getBroadcast(
-                            context,
-                            appWidgetId * 10000,
-                            refreshIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        views.setOnClickPendingIntent(R.id.btn_refresh_bg, refreshPendingIntent)
                     }
                 } else {
                     views.setTextViewText(R.id.widget_title, "오늘 식권 (0/0)")
