@@ -82,6 +82,20 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
             val next = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
             return next.toInstant().toEpochMilli()
         }
+
+        private const val ACTION_WIDGET_TAP = "com.kimby.bycalendar.ACTION_WIDGET_TAP"
+        private const val PREFS_NAME = "meal_widget_prefs"
+        private const val KEY_LAST_TOUCH_PREFIX = "last_touch_"
+
+        private fun nowMillis() = System.currentTimeMillis()
+        private fun getLastTouch(context: Context, id: Int): Long =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getLong("$KEY_LAST_TOUCH_PREFIX$id", 0L)
+
+        private fun setLastTouch(context: Context, id: Int, time: Long = nowMillis()) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putLong("$KEY_LAST_TOUCH_PREFIX$id", time).apply()
+        }
     }
 
     override fun onUpdate(
@@ -100,6 +114,13 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) { 
         super.onReceive(context, intent)
         when (intent.action) {
+            ACTION_WIDGET_TAP -> {
+                val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    setLastTouch(context, id) // 터치 시각 갱신
+                    updateAppWidget(context, AppWidgetManager.getInstance(context), id) // 즉시 선명 갱신
+                }
+            }
             ACTION_MARK_USED -> {
                 val uri = intent.getStringExtra(EXTRA_IMAGE_URI)?.toUri() ?: return
                 markImageAsUsed(context, uri)
@@ -226,12 +247,17 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onEnabled(context: Context) {
+        // 앱 위젯이 처음 추가될 때: 바로 선명하게
+        val manager = AppWidgetManager.getInstance(context)
+        val ids = manager.getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
+        ids.forEach { setLastTouch(context, it) }
         scheduleNextMidnight(context)
     }
 
     override fun onDisabled(context: Context) {
-        // 모든 위젯이 제거될 때 알람 해제
+        // 모든 위젯 제거 → 알람 해제 + 기록 정리(선택)
         cancelMidnightAlarm(context)
+        // prefs 정리는 선택사항
     }
 
     @SuppressLint("RemoteViewLayout")
@@ -264,10 +290,48 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
 
                     if (imageFile.exists()) {
                         val bmp = BitmapFactory.decodeFile(imageFile.absolutePath)
-                        // 🔽 교체
+//                        // 🔽 교체
+//                        val resizedBmp = resizeBitmapToFitWidget(bmp, 400, 400)
+//                        views.setImageViewBitmap(R.id.widget_image, resizedBmp)
+//                        views.setTextViewText(R.id.widget_title, "$today 오늘 식권 (${newIndex + 1} / ${tickets.size})")
+
+                        // 🔽 교체 시작
                         val resizedBmp = resizeBitmapToFitWidget(bmp, 400, 400)
-                        views.setImageViewBitmap(R.id.widget_image, resizedBmp)
-                        views.setTextViewText(R.id.widget_title, "$today 오늘 식권 (${newIndex + 1} / ${tickets.size})")
+
+                        // 30분 경과 여부 판단
+                        val lastTouch = getLastTouch(context, appWidgetId)
+                        val thirtyMin = 30 * 60 * 1000L
+
+                        // 최초 터치 기록 없으면 지금 시각으로 초기화
+                        if (lastTouch == 0L) {
+                            setLastTouch(context, appWidgetId)
+                        }
+
+                        val shouldBlur = (nowMillis() - getLastTouch(context, appWidgetId)) >= thirtyMin
+
+                        // blur 적용 여부 결정
+                        val displayBmp = if (shouldBlur) blurBitmap(resizedBmp, 12) else resizedBmp
+
+                        // 이미지 적용
+                        views.setImageViewBitmap(R.id.widget_image, displayBmp)
+                        views.setTextViewText(
+                            R.id.widget_title,
+                            "$today 오늘 식권 (${newIndex + 1} / ${tickets.size})"
+                        )
+
+                        // 이미지 탭하면 선명해지도록 클릭 인텐트 연결
+                        val tapIntent = Intent(context, MealTicketWidgetProvider::class.java).apply {
+                            action = ACTION_WIDGET_TAP
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                        }
+                        val tapPendingIntent = PendingIntent.getBroadcast(
+                            context,
+                            appWidgetId * 111,
+                            tapIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        views.setOnClickPendingIntent(R.id.widget_image, tapPendingIntent)
+                        // 🔽 교체 끝
 
                         //  ✅ 사용 처리 버튼 🔜 다이얼로그 확인 처리
                         val useIntent = Intent(context, MealTicketWidgetProvider::class.java).apply {
@@ -347,5 +411,97 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    private fun blurBitmap(src: Bitmap, radius: Int = 12): Bitmap {
+        require(radius in 1..25)
+        val bmp = src.copy(src.config ?: Bitmap.Config.ARGB_8888, true)
+        val w = bmp.width; val h = bmp.height
+        val pixels = IntArray(w * h)
+        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        val div = radius * 2 + 1
+        val r = IntArray(w * h); val g = IntArray(w * h); val b = IntArray(w * h)
+        val vmin = IntArray(maxOf(w, h))
+        val dv = IntArray(256 * div).apply {
+            val divsum = (div + 1) shr 1
+            val divsumSq = divsum * divsum
+            for (i in indices) this[i] = i / divsumSq
+        }
+
+        var yi = 0; var yw = 0
+        for (y in 0 until h) {
+            var rinsum = 0; var ginsum = 0; var binsum = 0
+            var routsum = 0; var goutsum = 0; var boutsum = 0
+            var rsum = 0; var gsum = 0; var bsum = 0
+
+            for (i in -radius..radius) {
+                val p = pixels[yi + minOf(w - 1, maxOf(i, 0))]
+                val pr = (p shr 16) and 0xFF
+                val pg = (p shr 8) and 0xFF
+                val pb = p and 0xFF
+                val rbs = div - Math.abs(i)
+                rsum += pr * rbs; gsum += pg * rbs; bsum += pb * rbs
+                if (i > 0) { rinsum += pr; ginsum += pg; binsum += pb }
+                else { routsum += pr; goutsum += pg; boutsum += pb }
+            }
+            var stackPointer = radius
+
+            for (x in 0 until w) {
+                r[yi] = dv[rsum]; g[yi] = dv[gsum]; b[yi] = dv[bsum]
+
+                val p1 = yi + minOf(x + radius + 1, w - 1)
+                val p2 = yi + maxOf(x - radius, 0)
+                val p1c = pixels[p1]; val p2c = pixels[p2]
+
+                val pr1 = (p1c shr 16) and 0xFF; val pg1 = (p1c shr 8) and 0xFF; val pb1 = p1c and 0xFF
+                val pr2 = (p2c shr 16) and 0xFF; val pg2 = (p2c shr 8) and 0xFF; val pb2 = p2c and 0xFF
+
+                rsum += rinsum - routsum
+                gsum += ginsum - goutsum
+                bsum += binsum - boutsum
+
+                rinsum += pr1; ginsum += pg1; binsum += pb1
+                routsum += pr2; goutsum += pg2; boutsum += pb2
+
+                yi++
+            }
+            yw += w
+        }
+
+        for (x in 0 until w) {
+            var rinsum = 0; var ginsum = 0; var binsum = 0
+            var routsum = 0; var goutsum = 0; var boutsum = 0
+            var rsum = 0; var gsum = 0; var bsum = 0
+            var yp = -radius * w
+            for (i in -radius..radius) {
+                val yi2 = maxOf(0, yp) + x
+                rsum += r[yi2] * (div - Math.abs(i))
+                gsum += g[yi2] * (div - Math.abs(i))
+                bsum += b[yi2] * (div - Math.abs(i))
+                if (i > 0) { rinsum += r[yi2]; ginsum += g[yi2]; binsum += b[yi2] }
+                else { routsum += r[yi2]; goutsum += g[yi2]; boutsum += b[yi2] }
+                if (i < h - 1) yp += w
+            }
+            var yi3 = x
+            for (y in 0 until h) {
+                val a = (pixels[yi3] ushr 24) and 0xFF
+                pixels[yi3] = (a shl 24) or (dv[rsum] shl 16) or (dv[gsum] shl 8) or dv[bsum]
+
+                val p1y = x + minOf(y + radius + 1, h - 1) * w
+                val p2y = x + maxOf(y - radius, 0) * w
+
+                rsum += rinsum - routsum
+                gsum += ginsum - goutsum
+                bsum += binsum - boutsum
+
+                rinsum += r[p1y]; ginsum += g[p1y]; binsum += b[p1y]
+                routsum += r[p2y]; goutsum += g[p2y]; boutsum += b[p2y]
+
+                yi3 += w
+            }
+        }
+
+        bmp.setPixels(pixels, 0, w, 0, 0, w, h)
+        return bmp
+    }
 
 }
