@@ -1,6 +1,7 @@
 package com.kimby.bycalendar.view
 
 import android.annotation.SuppressLint
+import android.annotation.TargetApi
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -13,6 +14,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
@@ -33,6 +36,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import androidx.core.graphics.createBitmap
+import kotlin.math.max
 
 class MealTicketWidgetProvider : AppWidgetProvider() {
     companion object {
@@ -44,10 +49,16 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
         const val ACTION_MIDNIGHT_TICK = "com.example.ACTION_MIDNIGHT_TICK"
         private const val ACTION_MANUAL_REFRESH = "com.kimby.bycalendar.ACTION_MANUAL_REFRESH"
         private const val REQ_CODE_MIDNIGHT = 1001
+        const val ACTION_BLUR_TIMEOUT = "com.kimby.bycalendar.ACTION_BLUR_TIMEOUT"
+        private const val REQ_CODE_BLUR_BASE = 50000
         private var widgetIndexMap = mutableMapOf<Int, Int>()
 
         // 날짜 바뀌면 인덱스 초기화 용(선택)
         private var lastShownDate: LocalDate? = null
+
+        // 테스트용 5초.  🔜  실제는 5*60*1000L (5분)
+        //private const val BLUR_DELAY_MS = 5_000L
+        private const val BLUR_DELAY_MS = 5*60*1000L
 
         @SuppressLint("ServiceCast")
         fun scheduleNextMidnight(context: Context) {
@@ -119,30 +130,64 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
                 val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     setLastTouch(context, id)
+                    scheduleBlurTimeout(context, id)  // ← 추가
                     updateAppWidget(context, AppWidgetManager.getInstance(context), id)
                 }
             }
-
+            ACTION_BLUR_TIMEOUT -> {
+                val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+                if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    // 여기서는 lastTouch를 건드리지 말고, 그냥 갱신해서 blur 되게만 함
+                    updateAppWidget(context, AppWidgetManager.getInstance(context), id)
+                }
+            }
             ACTION_MANUAL_REFRESH -> {
                 val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     setLastTouch(context, id)           // 수동만 상호작용으로 간주
+                    scheduleBlurTimeout(context, id)  // ← 추가
                     updateAppWidget(context, AppWidgetManager.getInstance(context), id)
                 }
             }
             ACTION_MARK_USED -> {
                 // 기존 처리 유지 + 상호작용으로 간주
+//                val uri = intent.getStringExtra(EXTRA_IMAGE_URI)?.toUri() ?: return
+//                val ids = AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
+//                ids.forEach { setLastTouch(context, it) }
                 val uri = intent.getStringExtra(EXTRA_IMAGE_URI)?.toUri() ?: return
-                val ids = AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
-                ids.forEach { setLastTouch(context, it) }
+                val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+
                 // (mark 처리 후 update 호출은 네 기존 로직대로)
                 markImageAsUsed(context, uri)
+                // DB 갱신 완료 후:
+                val mgr = AppWidgetManager.getInstance(context)
+                if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    setLastTouch(context, id)           // 상호작용 시각 갱신
+                    scheduleBlurTimeout(context, id)    // 재흐림 예약
+                    updateAppWidget(context, mgr, id)   // 해당 위젯만 즉시 갱신
+                } else {
+                    // id 없으면 모든 위젯 갱신(기존 로직 유지)
+                    val ids = mgr.getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
+                    ids.forEach {
+                        setLastTouch(context, it)
+                        scheduleBlurTimeout(context, it)
+                        updateAppWidget(context, mgr, it)
+                    }
+                }
             }
             ACTION_SHOW_CONFIRM_DIALOG -> {
                 val uriStr = intent.getStringExtra(EXTRA_IMAGE_URI) ?: return
+                val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+
+                if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    setLastTouch(context, id)                 // ★ 터치로 간주
+                    scheduleBlurTimeout(context, id)          // ★ 재흐림 예약(5초/30분)
+                }
+
                 val dialogIntent = Intent(context, WidgetConfirmActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     putExtra(EXTRA_IMAGE_URI, uriStr)
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)   // ★ 액티비티로 전달
                 }
                 context.startActivity(dialogIntent)
             }
@@ -153,6 +198,7 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
                 )
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     setLastTouch(context, appWidgetId)
+                    scheduleBlurTimeout(context, appWidgetId)  // ← 추가
                     val direction = if (intent.action == ACTION_SHOW_PREVIOUS) -1 else 1
                     updateAppWidget(
                         context,
@@ -271,12 +317,18 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
         // 앱 위젯이 처음 추가될 때: 바로 선명하게
         val manager = AppWidgetManager.getInstance(context)
         val ids = manager.getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
-        ids.forEach { setLastTouch(context, it) }
+        ids.forEach {
+            setLastTouch(context, it)
+            scheduleBlurTimeout(context, it) // 5초/30분 후 자동 흐림}
+        }
         scheduleNextMidnight(context)
     }
 
     override fun onDisabled(context: Context) {
         // 모든 위젯 제거 → 알람 해제 + 기록 정리(선택)
+        val mgr = AppWidgetManager.getInstance(context)
+        val ids = mgr.getAppWidgetIds(ComponentName(context, MealTicketWidgetProvider::class.java))
+        ids.forEach { cancelBlurTimeout(context, it) }
         cancelMidnightAlarm(context)
         // prefs 정리는 선택사항
     }
@@ -311,29 +363,28 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
 
                     if (imageFile.exists()) {
                         val bmp = BitmapFactory.decodeFile(imageFile.absolutePath)
-//                        // 🔽 교체
-//                        val resizedBmp = resizeBitmapToFitWidget(bmp, 400, 400)
-//                        views.setImageViewBitmap(R.id.widget_image, resizedBmp)
-//                        views.setTextViewText(R.id.widget_title, "$today 오늘 식권 (${newIndex + 1} / ${tickets.size})")
 
                         // 🔽 교체 시작
                         val resizedBmp = resizeBitmapToFitWidget(bmp, 400, 400)
 
-                        // 30분 경과 여부 판단
+                        // 5분 경과 여부 판단
                         val lastTouch = getLastTouch(context, appWidgetId)
-                        val thirtyMin = 30 * 60 * 1000L
+                        val thirtyMin = 5 * 60 * 1000L
+                        //val testDelay = 5000L // 테슽트용 5초
 
                         // 최초 터치 기록 없으면 지금 시각으로 초기화
                         if (lastTouch == 0L) {
                             setLastTouch(context, appWidgetId)
                         }
 
-                        val shouldBlur =
-                            (nowMillis() - getLastTouch(context, appWidgetId)) >= thirtyMin
+                        val shouldBlur = (nowMillis() - getLastTouch(context, appWidgetId)) >= thirtyMin
+
+                        //val shouldBlurTest = (nowMillis() - getLastTouch(context, appWidgetId)) >= testDelay
 
                         // 💡 여기서 Default로 blur 계산
                         val displayBmp = withContext(Dispatchers.Default) {
-                            if (shouldBlur) blurBitmap(resizedBmp, 12) else resizedBmp
+                            if (!shouldBlur) resizedBmp
+                            else addDimOverlay(blurCompat(resizedBmp, radius = 20f, passes = 2), alpha = 80)
                         }
 
                         // Main에서 RemoteViews 적용
@@ -365,6 +416,7 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
                                 Intent(context, MealTicketWidgetProvider::class.java).apply {
                                     action = ACTION_SHOW_CONFIRM_DIALOG
                                     putExtra(EXTRA_IMAGE_URI, imageFile.toUri().toString())
+                                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)   // ★ 추가
                                 }
                             val usePendingIntent = PendingIntent.getBroadcast(
                                 context,
@@ -464,97 +516,79 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun blurBitmap(src: Bitmap, radius: Int = 12): Bitmap {
-        require(radius in 1..25)
-        val bmp = src.copy(src.config ?: Bitmap.Config.ARGB_8888, true)
-        val w = bmp.width; val h = bmp.height
-        val pixels = IntArray(w * h)
-        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+    /**
+     * 더 강한 블러 (passes로 누적)
+     */
+    private fun blurCompat(
+        src: Bitmap,
+        radius: Float = 12f,     // 높일수록 강함 (예: 16f~24f)
+        passes: Int = 1          // 2~3 주면 훨씬 진해짐
+    ): Bitmap {
+        var work = src
+        var owns = false
+        val factor = max(2, (radius / 2f).toInt()) // 기존 4f보다 2f면 더 강하게
 
-        val div = radius * 2 + 1
-        val r = IntArray(w * h); val g = IntArray(w * h); val b = IntArray(w * h)
-        val vmin = IntArray(maxOf(w, h))
-        val dv = IntArray(256 * div).apply {
-            val divsum = (div + 1) shr 1
-            val divsumSq = divsum * divsum
-            for (i in indices) this[i] = i / divsumSq
+        repeat(passes) {
+            val w = max(1, work.width / factor)
+            val h = max(1, work.height / factor)
+            val small = Bitmap.createScaledBitmap(work, w, h, true)
+            val up = Bitmap.createScaledBitmap(small, src.width, src.height, true)
+            if (work !== src && owns) work.recycle()
+            small.recycle()
+            work = up
+            owns = true
         }
-
-        var yi = 0; var yw = 0
-        for (y in 0 until h) {
-            var rinsum = 0; var ginsum = 0; var binsum = 0
-            var routsum = 0; var goutsum = 0; var boutsum = 0
-            var rsum = 0; var gsum = 0; var bsum = 0
-
-            for (i in -radius..radius) {
-                val p = pixels[yi + minOf(w - 1, maxOf(i, 0))]
-                val pr = (p shr 16) and 0xFF
-                val pg = (p shr 8) and 0xFF
-                val pb = p and 0xFF
-                val rbs = div - Math.abs(i)
-                rsum += pr * rbs; gsum += pg * rbs; bsum += pb * rbs
-                if (i > 0) { rinsum += pr; ginsum += pg; binsum += pb }
-                else { routsum += pr; goutsum += pg; boutsum += pb }
-            }
-            var stackPointer = radius
-
-            for (x in 0 until w) {
-                r[yi] = dv[rsum]; g[yi] = dv[gsum]; b[yi] = dv[bsum]
-
-                val p1 = yi + minOf(x + radius + 1, w - 1)
-                val p2 = yi + maxOf(x - radius, 0)
-                val p1c = pixels[p1]; val p2c = pixels[p2]
-
-                val pr1 = (p1c shr 16) and 0xFF; val pg1 = (p1c shr 8) and 0xFF; val pb1 = p1c and 0xFF
-                val pr2 = (p2c shr 16) and 0xFF; val pg2 = (p2c shr 8) and 0xFF; val pb2 = p2c and 0xFF
-
-                rsum += rinsum - routsum
-                gsum += ginsum - goutsum
-                bsum += binsum - boutsum
-
-                rinsum += pr1; ginsum += pg1; binsum += pb1
-                routsum += pr2; goutsum += pg2; boutsum += pb2
-
-                yi++
-            }
-            yw += w
-        }
-
-        for (x in 0 until w) {
-            var rinsum = 0; var ginsum = 0; var binsum = 0
-            var routsum = 0; var goutsum = 0; var boutsum = 0
-            var rsum = 0; var gsum = 0; var bsum = 0
-            var yp = -radius * w
-            for (i in -radius..radius) {
-                val yi2 = maxOf(0, yp) + x
-                rsum += r[yi2] * (div - Math.abs(i))
-                gsum += g[yi2] * (div - Math.abs(i))
-                bsum += b[yi2] * (div - Math.abs(i))
-                if (i > 0) { rinsum += r[yi2]; ginsum += g[yi2]; binsum += b[yi2] }
-                else { routsum += r[yi2]; goutsum += g[yi2]; boutsum += b[yi2] }
-                if (i < h - 1) yp += w
-            }
-            var yi3 = x
-            for (y in 0 until h) {
-                val a = (pixels[yi3] ushr 24) and 0xFF
-                pixels[yi3] = (a shl 24) or (dv[rsum] shl 16) or (dv[gsum] shl 8) or dv[bsum]
-
-                val p1y = x + minOf(y + radius + 1, h - 1) * w
-                val p2y = x + maxOf(y - radius, 0) * w
-
-                rsum += rinsum - routsum
-                gsum += ginsum - goutsum
-                bsum += binsum - boutsum
-
-                rinsum += r[p1y]; ginsum += g[p1y]; binsum += b[p1y]
-                routsum += r[p2y]; goutsum += g[p2y]; boutsum += b[p2y]
-
-                yi3 += w
-            }
-        }
-
-        bmp.setPixels(pixels, 0, w, 0, 0, w, h)
-        return bmp
+        // 결과는 ARGB_8888 보장 아님 → 필요하면 복사
+        return if (work.config == Bitmap.Config.ARGB_8888) work
+        else work.copy(Bitmap.Config.ARGB_8888, false).also { work.recycle() }
     }
+
+    /**
+     * 더 “뿌옇게” 보이게 — 딤 오버레이 추가(선택)
+     */
+    private fun addDimOverlay(src: Bitmap, alpha: Int = 80): Bitmap {
+        val out = src.copy(Bitmap.Config.ARGB_8888, true)
+        val c = Canvas(out)
+        val p = Paint()
+        p.color = Color.argb(alpha.coerceIn(0, 255), 0, 0, 0)
+        c.drawRect(0f, 0f, out.width.toFloat(), out.height.toFloat(), p)
+        return out
+    }
+
+    /**
+     * Blur 예약 함수 추가
+     */
+    private fun scheduleBlurTimeout(context: Context, appWidgetId: Int, delayMs: Long = BLUR_DELAY_MS) {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pi = PendingIntent.getBroadcast(
+            context,
+            REQ_CODE_BLUR_BASE + appWidgetId,
+            Intent(ACTION_BLUR_TIMEOUT).setClass(context, MealTicketWidgetProvider::class.java)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val triggerAt = System.currentTimeMillis() + delayMs
+        if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
+            am.setWindow(AlarmManager.RTC_WAKEUP, triggerAt, /*windowLength*/ 5_000L, pi)
+        } else {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+        }
+    }
+
+    /**
+     * Blur 취소 함수 추가
+     */
+    private fun cancelBlurTimeout(context: Context, appWidgetId: Int) {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pi = PendingIntent.getBroadcast(
+            context,
+            REQ_CODE_BLUR_BASE + appWidgetId,
+            Intent(ACTION_BLUR_TIMEOUT).setClass(context, MealTicketWidgetProvider::class.java)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        am.cancel(pi)
+    }
+
 
 }

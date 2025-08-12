@@ -1,6 +1,7 @@
 package com.kimby.bycalendar.view
 
 import android.app.Activity
+import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
@@ -9,6 +10,7 @@ class WidgetConfirmActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val uriStr = intent.getStringExtra(MealTicketWidgetProvider.EXTRA_IMAGE_URI) ?: return
+        val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
 
         AlertDialog.Builder(this)
             .setTitle("식권 사용 처리")
@@ -17,6 +19,7 @@ class WidgetConfirmActivity : Activity() {
                 val markIntent = Intent(applicationContext, MealTicketWidgetProvider::class.java).apply {
                     action = MealTicketWidgetProvider.ACTION_MARK_USED
                     putExtra(MealTicketWidgetProvider.EXTRA_IMAGE_URI, uriStr)
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)   // ★ 같이 보냄
                 }
                 sendBroadcast(markIntent)
                 finish()
