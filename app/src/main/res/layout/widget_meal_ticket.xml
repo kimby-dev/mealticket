@@ -1,0 +1,135 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@android:color/black"
+    android:padding="8dp">
+
+    <!-- 상단 텍스트 -->
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="오늘 식권 (0장)"
+        android:textColor="@android:color/white"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <!-- 이미지 영역 -->
+    <FrameLayout
+        android:id="@+id/widget_image_container"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_weight="1"
+        android:layout_gravity="center">
+
+        <!-- 식권 이미지 -->
+        <ImageView
+            android:id="@+id/widget_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:adjustViewBounds="true" />
+
+        <!-- 갱신 버튼 -->
+        <ImageView
+            android:id="@+id/btn_refresh_bg"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:src="@drawable/btn_refresh_red"
+            android:layout_gravity="top|end"
+            android:scaleType="fitXY" />
+
+        <!-- 현재 식권 인덱스 / 등록된 식권 수 -->
+<!--        <TextView
+            android:id="@+id/txt_current_index"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_marginRight="5dp"
+            android:padding="4dp"
+            android:text="0 / 0"
+            android:textColor="#14CCB4"
+            android:textSize="25sp"
+            android:textStyle="bold" />
+-->
+    </FrameLayout>
+
+    <!-- 하단 컨트롤: 좌/우 버튼 + 사용 처리 버튼 -->
+    <LinearLayout
+        android:id="@+id/widget_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <!-- 왼쪽 정렬: 이전 버튼 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start|center_vertical">
+
+            <ImageView
+                android:id="@+id/btn_prev"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:contentDescription="이전 이미지"
+                android:src="@drawable/ic_arr_l"
+                android:visibility="invisible" />
+        </LinearLayout>
+
+        <!-- 중앙 정렬: 사용 처리 버튼 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <FrameLayout
+                android:id="@+id/btn_mark_used_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <ImageView
+                    android:id="@+id/btn_mark_used_bg"
+                    android:layout_width="100dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/btn_used_128x57"
+                    android:scaleType="fitXY" />
+
+                <TextView
+                    android:id="@+id/btn_mark_used_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:text="사용 처리"
+                    android:textColor="@android:color/white"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_gravity="center"
+                    android:textSize="20sp"
+                    android:padding="4dp" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- 오른쪽 정렬: 다음 버튼 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end|center_vertical">
+
+            <ImageView
+                android:id="@+id/btn_next"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:contentDescription="다음 이미지"
+                android:src="@drawable/ic_arr_r"
+                android:visibility="invisible" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

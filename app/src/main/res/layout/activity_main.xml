@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".view.MainActivity">
+
+    <FrameLayout
+        android:id="@+id/calendar_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHeight_percent="0.42">
+
+        <!-- 커스텀 달력 (RecyclerView 기반) -->
+        <LinearLayout
+            android:id="@+id/custom_calendar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="@android:color/white">
+
+            <!-- 월 표시 영역 -->
+            <LinearLayout
+                android:id="@+id/month_navigation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="8dp"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/btn_month_prev"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="이전 달"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_arr_l" />
+
+                <TextView
+                    android:id="@+id/text_current_month"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2025년 7월"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:paddingHorizontal="16dp"
+                    android:textColor="@android:color/black" />
+
+                <ImageButton
+                    android:id="@+id/btn_month_next"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_arr_r"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="다음 달"
+                    android:scaleType="fitCenter" />
+            </LinearLayout>
+
+            <!-- 요일 헤더 -->
+            <LinearLayout
+                android:id="@+id/day_of_week_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingVertical="4dp"
+                android:gravity="center">
+
+                <!-- 요일 텍스트는 코드에서 동적으로 생성해도 좋지만, 여기선 고정 -->
+                <TextView style="@style/WeekdayTextView" android:text="일" android:textColor="#D32F2F"/>
+                <TextView style="@style/WeekdayTextView" android:text="월"/>
+                <TextView style="@style/WeekdayTextView" android:text="화"/>
+                <TextView style="@style/WeekdayTextView" android:text="수"/>
+                <TextView style="@style/WeekdayTextView" android:text="목"/>
+                <TextView style="@style/WeekdayTextView" android:text="금"/>
+                <TextView style="@style/WeekdayTextView" android:text="토" android:textColor="#1976D2"/>
+            </LinearLayout>
+
+            <!-- 날짜 목록 (RecyclerView로 구성된 커스텀 달력) -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler_calendar"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:padding="4dp"
+                android:overScrollMode="never" >
+
+            </androidx.recyclerview.widget.RecyclerView>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 구분 선 -->
+    <View
+        android:id="@+id/divider_drag_handle"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:background="#CCCCCC"
+        android:clickable="true"
+        android:focusable="true"
+        app:layout_constraintTop_toBottomOf="@id/calendar_container"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        />
+
+    <!-- 탭 + 버튼 수평 배치 -->
+    <LinearLayout
+        android:id="@+id/top_controls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider_drag_handle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHeight_percent="0.1">
+
+        <!-- 탭 (왼쪽 확장) -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tab_layout"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            app:tabMode="scrollable"
+            app:tabGravity="start"
+            app:tabIndicatorFullWidth="false"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- 버튼 그룹 (오른쪽) -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end">
+
+            <ImageButton
+                android:id="@+id/btn_default_view"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/btn_layer_view_black_24x24"
+                android:contentDescription="기본보기" />
+
+            <ImageButton
+                android:id="@+id/btn_grid_view"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/btn_grie_view_black_24x24"
+                android:layout_marginStart="8dp"
+                android:contentDescription="그리드보기" />
+
+            <ImageButton
+                android:id="@+id/btn_add_photo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/btn_add_black_24x24"
+                android:layout_marginStart="8dp"
+                android:contentDescription="이미지 추가하기" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 콘텐츠 영역: ViewPager2 + RecyclerView -->
+    <FrameLayout
+        android:id="@+id/main_content_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/top_controls"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintHeight_percent="0.5" >
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/main_view_pager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/main_grid_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:foregroundTint="#B31313"
+            android:visibility="gone" />
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

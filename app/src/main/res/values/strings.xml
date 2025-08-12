@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">식권 보관함</string>
+
+    <string name="btn_default_view">기본 보기</string>
+    <string name="appwidget_text">EXAMPLE</string>
+    <string name="configure">Configure</string>
+    <string name="add_widget">Add widget</string>
+    <string name="app_widget_description">This is an app widget description</string>
+</resources>

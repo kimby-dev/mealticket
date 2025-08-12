@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Android 12+에서 정확 알람을 쓰려면 선언 필요(사용자 허용 필요할 수 있음) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@drawable/meal_ticket_512x512"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BYCalendar"
+        tools:targetApi="31">
+        <activity
+            android:name=".view.WidgetConfirmActivity"
+            android:theme="@style/Theme.AppCompat.Dialog.Alert"
+            android:exported="false" />
+
+        <receiver
+            android:name=".view.MealTicketWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/meal_ticket_widget_provider_info" />
+        </receiver>
+
+        <!-- 자정 알람 수신 -->
+        <receiver
+            android:name=".widget.MidnightTickReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_MIDNIGHT_TICK"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- 재부팅/시간대 변경 시 알람 재예약 -->
+        <receiver
+            android:name=".widget.ReScheduleReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name=".view.SettingActivity"
+            android:exported="false" />
+        <activity
+            android:name=".view.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+
+</manifest>
