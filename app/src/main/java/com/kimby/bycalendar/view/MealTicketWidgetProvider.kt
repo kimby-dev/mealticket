@@ -57,8 +57,8 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
         private var lastShownDate: LocalDate? = null
 
         // 테스트용 5초.  🔜  실제는 5*60*1000L (5분)
-        //private const val BLUR_DELAY_MS = 5_000L
-        private const val BLUR_DELAY_MS = 5*60*1000L
+        private const val BLUR_DELAY_MS_TEST = 5_000L
+        private const val BLUR_DELAY_MS = 300_000L
 
         @SuppressLint("ServiceCast")
         fun scheduleNextMidnight(context: Context) {
@@ -369,17 +369,17 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
 
                         // 5분 경과 여부 판단
                         val lastTouch = getLastTouch(context, appWidgetId)
-                        val thirtyMin = 5 * 60 * 1000L
-                        //val testDelay = 5000L // 테슽트용 5초
+                        val fiveMin = 300000L
+                        val testDelay = 5000L // 테슽트용 5초
 
                         // 최초 터치 기록 없으면 지금 시각으로 초기화
                         if (lastTouch == 0L) {
                             setLastTouch(context, appWidgetId)
                         }
 
-                        val shouldBlur = (nowMillis() - getLastTouch(context, appWidgetId)) >= thirtyMin
+                        val shouldBlur = (nowMillis() - getLastTouch(context, appWidgetId)) >= fiveMin
 
-                        //val shouldBlurTest = (nowMillis() - getLastTouch(context, appWidgetId)) >= testDelay
+                        val shouldBlurTest = (nowMillis() - getLastTouch(context, appWidgetId)) >= testDelay
 
                         // 💡 여기서 Default로 blur 계산
                         val displayBmp = withContext(Dispatchers.Default) {
