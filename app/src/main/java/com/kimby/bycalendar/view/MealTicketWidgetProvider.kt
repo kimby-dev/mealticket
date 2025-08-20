@@ -1,7 +1,6 @@
 package com.kimby.bycalendar.view
 
 import android.annotation.SuppressLint
-import android.annotation.TargetApi
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -14,12 +13,9 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RenderEffect
-import android.graphics.Shader
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
-import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.net.toUri
@@ -36,7 +32,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import androidx.core.graphics.createBitmap
 import kotlin.math.max
 
 class MealTicketWidgetProvider : AppWidgetProvider() {
@@ -57,7 +52,7 @@ class MealTicketWidgetProvider : AppWidgetProvider() {
         private var lastShownDate: LocalDate? = null
 
         // 테스트용 5초.  🔜  실제는 5*60*1000L (5분)
-        private const val BLUR_DELAY_MS_TEST = 5_000L
+//        private const val BLUR_DELAY_MS_TEST = 5_000L
         private const val BLUR_DELAY_MS = 300_000L
 
         @SuppressLint("ServiceCast")

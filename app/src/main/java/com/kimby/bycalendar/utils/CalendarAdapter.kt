@@ -64,27 +64,27 @@ class CalendarAdapter(
 
         // 🎯 조건별 스타일 : 배경 및 색상 처리
         when {
-            date == selectedDate -> {
+            date == selectedDate -> { // 선택한 날
                 holder.container.setBackgroundResource(R.drawable.bg_calendar_day_selected)
                 holder.dateText.setTextColor(Color.WHITE)
                 holder.labelText.setTextColor(Color.WHITE)
             }
-            date == today -> {
+            date == today -> {  // 오늘
                 holder.container.setBackgroundResource(R.drawable.bg_calendar_day_today)
                 holder.dateText.setTextColor(Color.BLACK)
                 holder.labelText.setTextColor(Color.BLACK)
             }
-            holidays.contains(date) || date.dayOfWeek == DayOfWeek.SUNDAY -> {
+            holidays.contains(date) || date.dayOfWeek == DayOfWeek.SUNDAY -> { // 일요일 / 공휴일
                 holder.container.setBackgroundResource(R.drawable.bg_calendar_day_holiday)
                 holder.dateText.setTextColor(Color.RED)
                 holder.labelText.setTextColor(Color.RED)
             }
-            date.dayOfWeek == DayOfWeek.SATURDAY -> {
-                holder.container.setBackgroundResource(R.drawable.bg_calendar_day_default)
+            date.dayOfWeek == DayOfWeek.SATURDAY -> { // 토요일
+                holder.container.setBackgroundResource(R.drawable.bg_calendar_day_saturday)
                 holder.dateText.setTextColor(ContextCompat.getColor(context, R.color.blue))
                 holder.labelText.setTextColor(ContextCompat.getColor(context, R.color.blue))
             }
-            else -> {
+            else -> { // 평일
                 holder.container.setBackgroundResource(R.drawable.bg_calendar_day_default)
                 holder.dateText.setTextColor(Color.BLACK)
                 holder.labelText.setTextColor(Color.BLACK)
